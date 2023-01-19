@@ -1,0 +1,338 @@
+
+- hosts: 127.0.0.1
+  tasks:
+    - name: Create ca-csr.json
+      #become: true
+      copy:
+        dest: ca-csr.json
+        content: '{"CN":"Kubernetes","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"Kubernetes","OU":"CA","ST":"California"}]}'
+
+    - name: Create ca-config.json
+      #become: true
+      copy:
+        dest: ca-config.json
+        content: '{"signing":{"default":{"expiry":"8760h"},"profiles":{"kubernetes":{"usages":["signing","key encipherment","server auth","client auth"],"expiry":"8760h"}}}}'
+
+    - name: Create the ca.pem & ca-key.pem
+      #become: true
+      shell: |
+        cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+
+    - name: Create admin-csr.json
+      #become: true
+      copy:
+        dest: admin-csr.json
+        content: '{"CN":"admin","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"system:masters","OU":"Kubernetes The Hard Way","ST":"California"}]}'
+
+    - name: Create admin.pem & admin-key.pem
+      #become: true
+      shell: |
+        cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes \
+        admin-csr.json | cfssljson -bare admin
+
+    - name: Create worker-*-csr.json
+      #become: true
+      copy:
+        dest: worker-{{i}}-csr.json
+        content: '{"CN":"system:node:worker-{{i}}","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"system:nodes","OU":"Kubernetes The Hard Way","ST":"California"}]}'
+      loop: "{{ range (0, 2) }}"
+      loop_control:
+        index_var: i
+
+    - name: Create worker-*.pem & worker-*-key.pem for kubelet
+      # become: true
+      shell: |
+        EXTERNAL_IP=$(cat /tmp/worker_{{i}}_ip)
+        INTERNAL_IP=10.240.0.2{{i}}
+        cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -hostname=worker-{{i}},${EXTERNAL_IP},${INTERNAL_IP} \
+        -profile=kubernetes \
+        worker-{{i}}-csr.json | cfssljson -bare worker-{{i}}
+      loop: "{{ range (0, 2) }}"
+      loop_control:
+        index_var: i
+      
+    - name: Copy kube-controller-manager.pem & kube-controller-manager-key.pem
+      #become: true
+      copy:
+        dest: kube-controller-manager-csr.json
+        content: '{"CN":"system:kube-controller-manager","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"system:kube-controller-manager","OU":"Kubernetes The Hard Way","ST":"California"}]}'
+
+    - name: Generate certs
+     #become: true
+      shell: |
+        cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes \
+        kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager
+      
+    - name: Copy kube-proxy-key.pem & kube-proxy.pem
+      #become: true
+      copy:
+        dest: kube-proxy-csr.json
+        content: '{"CN":"system:kube-proxy","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"system:node-proxier","OU":"Kubernetes The Hard Way","ST":"California"}]}'
+
+    - name: Generate certs
+      #become: true
+      shell: |
+        cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes \
+        kube-proxy-csr.json | cfssljson -bare kube-proxy
+    
+    - name: Copy kube-scheduler-key.pem & kube-scheduler.pem
+      #become: true
+      copy:
+        dest: kube-scheduler-csr.json
+        content: '{"CN":"system:kube-scheduler","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"system:kube-scheduler","OU":"Kubernetes The Hard Way","ST":"California"}]}'
+
+    - name: Generate certs
+      #become: true
+      shell: |
+        cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes \
+        kube-scheduler-csr.json | cfssljson -bare kube-scheduler
+      
+    - name: Generate kubernetes-csr.json
+        #become: true
+      copy:
+        dest: kubernetes-csr.json
+        content: '{"CN":"kubernetes","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"Kubernetes","OU":"Kubernetes The Hard Way","ST":"California"}]}'
+
+    - name: Copy kubernetes-key.pem & kubernetes.pem
+        #become: true
+      shell: |
+          KUBERNETES_PUBLIC_ADDRESS=$(cat /tmp/lb-address)
+          KUBERNETES_HOSTNAMES="kubernetes,kubernetes.default,kubernetes.default.svc,kubernetes.default.svc.cluster,kubernetes.svc.cluster.local"
+          cfssl gencert \
+          -ca=ca.pem \
+          -ca-key=ca-key.pem \
+          -config=ca-config.json \
+          -hostname=10.32.0.1,10.240.0.10,10.240.0.11,10.240.0.12,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,${KUBERNETES_HOSTNAMES} \
+          -profile=kubernetes \
+          kubernetes-csr.json | cfssljson -bare kubernetes
+
+    - name: Copy service-account-key.pem & service-account.pem
+      #become: true
+      copy:
+        dest: service-account-csr.json
+        content: '{"CN":"service-accounts","key":{"algo":"rsa","size":2048},"names":[{"C":"US","L":"Sacramento","O":"Kubernetes","OU":"Kubernetes The Hard Way","ST":"California"}]}'
+
+    - name: Generate certs
+     # become: true
+      shell: |
+        cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes \
+        service-account-csr.json | cfssljson -bare service-account
+
+
+- hosts: worker_0
+  tasks:
+    - name: Copy ca.pem worker-0-key.pem worker-0.pem to worker_0
+      copy:
+        src: "{{ item }}"
+        dest: "."
+      with_items:
+        - ca.pem
+        - worker-0-key.pem
+        - worker-0.pem   
+
+- hosts: worker_1
+  tasks:
+    - name: Copy ca.pem worker-1-key.pem worker-1.pem to worker_1
+      copy:
+        src: "{{ item }}"
+        dest: "."
+      with_items:
+        - ca.pem
+        - worker-1-key.pem
+        - worker-1.pem   
+
+- hosts: controllers
+  tasks:
+    - name: Copy certs to controllers
+      copy:
+        src: "{{ item }}"
+        dest: "."
+      with_items:
+        - ca.pem
+        - ca-key.pem
+        - kubernetes-key.pem 
+        - kubernetes.pem
+        - service-account-key.pem
+        - service-account.pem    
+  
+- hosts: 127.0.0.1
+  tasks:
+    - name: Generate kubeconfig for each worker node
+      shell: |
+        KUBERNETES_PUBLIC_ADDRESS=$(cat /tmp/lb_ip)
+        kubectl config set-cluster kubernetes-the-hard-way \
+        --certificate-authority=ca.pem \
+        --embed-certs=true \
+        --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 \
+        --kubeconfig=worker-{{i}}.kubeconfig
+        kubectl config set-credentials system:node:worker-{{i}} \
+        --client-certificate=worker-{{i}}.pem \
+        --client-key=worker-{{i}}-key.pem \
+        --embed-certs=true \
+        --kubeconfig=worker-{{i}}.kubeconfig
+        kubectl config set-context default \
+        --cluster=kubernetes-the-hard-way \
+        --user=system:node:worker-{{i}} \
+        --kubeconfig=worker-{{i}}.kubeconfig
+        kubectl config use-context default --kubeconfig=worker-{{i}}.kubeconfig
+      loop: "{{ range (0, 2) }}"
+      loop_control:
+        index_var: i
+
+    - name: Generate kube-proxy
+      shell: |
+        KUBERNETES_PUBLIC_ADDRESS=$(cat /tmp/lb_ip)
+        kubectl config set-cluster kubernetes-the-hard-way \
+        --certificate-authority=ca.pem \
+        --embed-certs=true \
+        --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 \
+        --kubeconfig=kube-proxy.kubeconfig
+        kubectl config set-credentials system:kube-proxy \
+          --client-certificate=kube-proxy.pem \
+          --client-key=kube-proxy-key.pem \
+          --embed-certs=true \
+          --kubeconfig=kube-proxy.kubeconfig
+        kubectl config set-context default \
+          --cluster=kubernetes-the-hard-way \
+          --user=system:kube-proxy \
+          --kubeconfig=kube-proxy.kubeconfig
+        kubectl config use-context default --kubeconfig=kube-proxy.kubeconfig
+
+    - name: Generate kube-controller-manager
+      shell: |
+        KUBERNETES_PUBLIC_ADDRESS=$(cat /tmp/lb_ip)
+        kubectl config set-cluster kubernetes-the-hard-way \
+        --certificate-authority=ca.pem \
+        --embed-certs=true \
+        --server=https://127.0.0.1:6443 \
+        --kubeconfig=kube-controller-manager.kubeconfig
+        kubectl config set-credentials system:kube-controller-manager \
+          --client-certificate=kube-controller-manager.pem \
+          --client-key=kube-controller-manager-key.pem \
+          --embed-certs=true \
+          --kubeconfig=kube-controller-manager.kubeconfig
+        kubectl config set-context default \
+          --cluster=kubernetes-the-hard-way \
+          --user=system:kube-controller-manager \
+          --kubeconfig=kube-controller-manager.kubeconfig
+        kubectl config use-context default --kubeconfig=kube-controller-manager.kubeconfig
+
+    - name: Generate kube-scheduler
+      shell: |
+        KUBERNETES_PUBLIC_ADDRESS=$(cat /tmp/lb_ip)
+        kubectl config set-cluster kubernetes-the-hard-way \
+        --certificate-authority=ca.pem \
+        --embed-certs=true \
+        --server=https://127.0.0.1:6443 \
+        --kubeconfig=kube-scheduler.kubeconfig
+        kubectl config set-credentials system:kube-scheduler \
+          --client-certificate=kube-scheduler.pem \
+          --client-key=kube-scheduler-key.pem \
+          --embed-certs=true \
+          --kubeconfig=kube-scheduler.kubeconfig
+        kubectl config set-context default \
+          --cluster=kubernetes-the-hard-way \
+          --user=system:kube-scheduler \
+          --kubeconfig=kube-scheduler.kubeconfig
+        kubectl config use-context default --kubeconfig=kube-scheduler.kubeconfig
+
+    - name: Generate admin
+      shell: |
+        KUBERNETES_PUBLIC_ADDRESS=$(cat /tmp/lb_ip)
+        kubectl config set-cluster kubernetes-the-hard-way \
+        --certificate-authority=ca.pem \
+        --embed-certs=true \
+        --server=https://127.0.0.1:6443 \
+        --kubeconfig=admin.kubeconfig
+        kubectl config set-credentials admin \
+          --client-certificate=admin.pem \
+          --client-key=admin-key.pem \
+          --embed-certs=true \
+          --kubeconfig=admin.kubeconfig
+        kubectl config set-context default \
+          --cluster=kubernetes-the-hard-way \
+          --user=admin \
+          --kubeconfig=admin.kubeconfig
+        kubectl config use-context default --kubeconfig=admin.kubeconfig
+
+- hosts: worker_0
+  tasks:
+    - name: kube stuff to worker 0
+      copy:
+        src: "{{ item }}"
+        dest: "."
+      with_items:
+        - worker-0.kubeconfig
+        - kube-proxy.kubeconfig 
+      
+
+- hosts: worker_1
+  tasks:
+    - name: kube stuff to worker 1
+      copy:
+        src: "{{ item }}"
+        dest: "."
+      with_items:
+        - worker-1.kubeconfig
+        - kube-proxy.kubeconfig   
+      
+
+- hosts: controllers
+  tasks:
+    - name: Copy kube stuff to controllers
+      copy:
+        src: "{{ item }}"
+        dest: "."
+      with_items:
+        - admin.kubeconfig
+        - kube-controller-manager.kubeconfig 
+        - kube-scheduler.kubeconfig     
+
+- hosts: 127.0.0.1
+  tasks:
+    - name: Create encryption-config.yaml
+      shell: |
+        ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+        cat > encryption-config.yaml <<EOF
+        kind: EncryptionConfig
+        apiVersion: v1
+        resources:
+          - resources:
+              - secrets
+            providers:
+              - aescbc:
+                  keys:
+                    - name: key1
+                      secret: ${ENCRYPTION_KEY}
+              - identity: {}
+        EOF
+- hosts: controllers
+  tasks:
+    - name: Copy encryption-config.yaml to controllers
+      copy:
+        src: encryption-config.yaml
+        dest: "."
