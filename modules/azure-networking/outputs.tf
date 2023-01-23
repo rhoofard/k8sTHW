@@ -22,6 +22,14 @@ output "lb_ip" {
   value = azurerm_public_ip.lb_public_ip.ip_address
 }
 
+output "lb_id" {
+  value = azurerm_lb.lb.id
+}
+
+output "backend_pool_id" {
+  value = azurerm_lb_backend_address_pool.backend_pool.id
+}
+
 output "controller_0_ip" {
   value = azurerm_public_ip.controller_public_ip[0].ip_address
 }

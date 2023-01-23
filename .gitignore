@@ -1,0 +1,6 @@
+terraform.tfstate*
+encryption-config.yaml
+.terraform.lock.hcl
+.terraform
+/playbook/*
+!/playbook/certs.yaml
