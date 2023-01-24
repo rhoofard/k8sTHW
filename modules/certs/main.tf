@@ -36,7 +36,7 @@ resource "null_resource" "installing_ansible_workers" {
 }
 
 resource "null_resource" "installing_ansible_controllers" {
-    count = 2
+    count = 3
     provisioner "remote-exec" {
         inline = [
         "sudo mkdir /home/${var.ssh_user}/ansible",

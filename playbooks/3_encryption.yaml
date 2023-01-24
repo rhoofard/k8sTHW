@@ -1,0 +1,24 @@
+- hosts: 127.0.0.1
+  tasks:
+    - name: Create encryption-config.yaml
+      shell: |
+        ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+        cat > encryption-config.yaml <<EOF
+        kind: EncryptionConfig
+        apiVersion: v1
+        resources:
+          - resources:
+              - secrets
+            providers:
+              - aescbc:
+                  keys:
+                    - name: key1
+                      secret: ${ENCRYPTION_KEY}
+              - identity: {}
+        EOF
+- hosts: controllers
+  tasks:
+    - name: Copy encryption-config.yaml to controllers
+      copy:
+        src: encryption-config.yaml
+        dest: "."
