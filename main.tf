@@ -28,3 +28,22 @@ module "frontend-lb" {
   backend_pool_id = module.azure-networking.backend_pool_id
   resource_group_name = module.azure-networking.resource_group_name
 }
+
+module "ansible-playbooks" {
+  source = "./modules/ansible-playbooks"
+  depends_on = [module.frontend-lb]
+}
+
+module "remote-kubectl" {
+  source = "./modules/remote-kubectl"
+  lb_ip = module.azure-networking.lb_ip
+  depends_on = [module.ansible-playbooks]
+}
+
+module "network-routes" {
+  source = "./modules/network-routes"
+  resource_group_name = module.azure-networking.resource_group_name
+  subnet_id = module.azure-networking.subnet_id
+  azure_region = var.azure_region
+  depends_on = [module.remote-kubectl]
+}

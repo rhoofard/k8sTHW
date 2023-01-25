@@ -1,7 +1,7 @@
 
 resource "local_file" "ansible_hosts" {
     content  = "[controllers]\n${var.controller_0_ip} ansible_user=kuberoot ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n${var.controller_1_ip} ansible_user=kuberoot ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n${var.controller_2_ip} ansible_user=kuberoot ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n\n[workers]\n${var.worker_0_ip} ansible_user=kuberoot ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n${var.worker_1_ip} ansible_user=kuberoot ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n\n[worker_0]\n${var.worker_0_ip} ansible_user=kuberoot ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n\n[worker_1]\n${var.worker_1_ip} ansible_user=kuberoot ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
-    filename = "hosts"
+    filename = "hosts.ini"
 }
 resource "local_file" "controller_ips" {
     count = 3

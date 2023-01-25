@@ -1,0 +1,21 @@
+- hosts: worker_0
+  tasks:
+    - pause:
+        seconds: 5
+
+    - name: moving kubernetes keys and configs
+      shell: |
+        sudo mv worker-0-key.pem worker-0.pem /var/lib/kubelet/
+        sudo mv worker-0.kubeconfig /var/lib/kubelet/kubeconfig
+        sudo mv ca.pem /var/lib/kubernetes/
+
+- hosts: worker_1
+  tasks:
+    - pause:
+        seconds: 5
+
+    - name: moving kubernetes keys and configs
+      shell: |
+        sudo mv worker-1-key.pem worker-1.pem /var/lib/kubelet/
+        sudo mv worker-1.kubeconfig /var/lib/kubelet/kubeconfig
+        sudo mv ca.pem /var/lib/kubernetes/

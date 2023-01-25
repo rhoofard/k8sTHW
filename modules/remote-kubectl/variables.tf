@@ -1,0 +1,1 @@
+variable "lb_ip" {}
